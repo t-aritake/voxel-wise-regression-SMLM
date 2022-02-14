@@ -243,10 +243,10 @@ class Tubulin_191216(torch.utils.data.Dataset):
         return 30000
 
     def __getitem__(self, index):
-        im2 = numpy.array(Image.open('./data/191216/cam2/{:05d}.tiff'.format(index)))
-        im1 = numpy.array(Image.open('./data/191216/cam1/{:05d}.tiff'.format(index)))
-        im3 = numpy.array(Image.open('./data/191216/cam3/{:05d}.tiff'.format(index)))
-        im4 = numpy.array(Image.open('./data/191216/cam4/{:05d}.tiff'.format(index)))
+        im2 = numpy.array(Image.open('./data/datasets/191216/cam2/{:05d}.tiff'.format(index)))
+        im1 = numpy.array(Image.open('./data/datasets/191216/cam1/{:05d}.tiff'.format(index)))
+        im3 = numpy.array(Image.open('./data/datasets/191216/cam3/{:05d}.tiff'.format(index)))
+        im4 = numpy.array(Image.open('./data/datasets/191216/cam4/{:05d}.tiff'.format(index)))
 
         im = numpy.array([
             im2,

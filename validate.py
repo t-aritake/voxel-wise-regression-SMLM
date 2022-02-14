@@ -23,7 +23,7 @@ def jaccard(x, y):
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 # specify directory of a learned model
-loaddir = sys.argsv[1]
+loaddir = sys.argv[1]
 
 # load trained parameters to a network
 with open(loaddir + 'args.pkl', 'rb') as f:
@@ -130,9 +130,6 @@ with torch.no_grad():
             closest_coords = diff[numpy.arange(est_coord.shape[0]), min_idx]
 
             closest_log.append(closest_coords)
-
-        if (i+1) % 100 == 0:
-            print(i+1)
 
 
 print(tdiffs)
