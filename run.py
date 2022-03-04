@@ -66,6 +66,7 @@ def train(args, model, device, train_loader, optimizer, loss_func, epoch):
 
     return train_loss
 
+
 def test(args, model, device, test_loader, loss_func):
     model.eval()
     test_loss = 0

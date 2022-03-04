@@ -30,7 +30,6 @@ class LocationAndConfidenceLoss(torch.nn.Module):
         self._default_centering = default_centering
         self._negapos_ratio = negapos_ratio
 
-
     def forward(self, predictions, targets):
         """
         Calculate loss function
