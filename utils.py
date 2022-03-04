@@ -8,7 +8,8 @@ def gen_defaults(intervals, device, centering=False):
     y = torch.arange(0, 1, intervals[1]).to(device)
     z = torch.arange(0, 1, intervals[2]).to(device)
 
-    coord = torch.stack(torch.meshgrid([x, y, z])).permute(3, 2, 1, 0).reshape(-1, 3)
+    coord = torch.stack(torch.meshgrid(x, y, z, indexing='ij'))\
+        .permute(3, 2, 1, 0).reshape(-1, 3)
     if centering is True:
         coord = coord + intervals / 2
 
