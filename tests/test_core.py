@@ -137,3 +137,29 @@ def test_nms():
     # 0 is suppressed by 1; 3 is within the z radius of 1 (|dx|=10, |dz|=80 -> 0.04+0.64 < 1)
     assert keep.tolist() == [False, True, True, False]
     assert nms(coords, conf, None).all()
+
+
+def test_outside_molecules_are_rendered_but_not_labeled():
+    np.random.seed(0)
+    ds = make_dataset(n=4, outside_density=1.0, outside_z_extent=(400.0, 400.0), lmbd=0, sigma=0)
+    lo, hi = ds._lo[2], ds._lo[2] + ds._extent[2]
+    z = ds.outside_coordinates[:, 2]
+    assert len(z) > 0 and np.all((z < lo) | (z >= hi))
+    assert np.all((z >= lo - 400) & (z < hi + 400))
+
+    image, target = ds[0]
+    assert len(target) == 4  # only the labeled molecules
+    np.random.seed(0)
+    plain = make_dataset(n=4, lmbd=0, sigma=0)
+    plain.particle_coordinates[:] = ds.particle_coordinates
+    plain.weight[:] = ds.weight
+    # the distractors add intensity to the image
+    assert image.sum() > plain[0][0].sum()
+
+
+def test_inside_space():
+    from vwr_smlm.utils import TargetSpace, inside_space
+
+    space = TargetSpace(torch.tensor([0.0, 0.0, -200.0]), torch.tensor([100.0, 100.0, 1550.0]))
+    c = torch.tensor([[50.0, 50.0, 0.0], [50.0, 50.0, 1350.0], [-1.0, 50.0, 0.0], [50, 50, -201.0]])
+    assert inside_space(c, space).tolist() == [True, False, False, False]
