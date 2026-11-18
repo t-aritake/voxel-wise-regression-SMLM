@@ -27,6 +27,7 @@ from .utils import (
     gen_defaults,
     get_device,
     grid_size,
+    inside_space,
     load_model,
     nms,
     nms_radius,
@@ -90,6 +91,7 @@ def main(cfg: DictConfig) -> None:
     space_min = dataset.space.minimum.to(device)
     space_size = dataset.space.size.to(device)
     radius = nms_radius(cfg, device)
+    drop_outside = OmegaConf.select(cfg, "inference.drop_outside", default=False)
     eval_voxel = torch.tensor(list(vcfg.eval_voxel), dtype=torch.float64, device=device)
     eval_grid = torch.ceil(space_size / eval_voxel)
 
@@ -117,6 +119,11 @@ def main(cfg: DictConfig) -> None:
                 continue
             est_coord = coord[detected]
             est_coord = est_coord[nms(est_coord, pred[detected, 3], radius)]
+            if drop_outside:
+                est_coord = est_coord[inside_space(est_coord, dataset.space)]
+            if len(est_coord) == 0:
+                union += len(np.unique(true_voxels))
+                continue
 
             # offset to the closest true molecule from each estimate
             diff = (true_coord[None, :, :] - est_coord[:, None, :]).cpu().numpy()

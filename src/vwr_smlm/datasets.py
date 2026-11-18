@@ -59,6 +59,11 @@ class RandomDataset(Dataset):
     augmentation : callable applied to the observation coordinates (e.g. lateral drift)
     lmbd : mean of the Poisson shot noise
     sigma : std of the Gaussian read noise
+    outside_density : additionally place unlabeled molecules above / below the target space
+        (out-of-focus distractors), at this density relative to the labeled molecules per unit
+        z.  They appear in the image but not in ``target``, so the model learns not to report
+        them.  0 = off (original behavior).
+    outside_z_extent : (below, above) thickness [nm] of the z slabs where distractors are placed
     """
 
     def __init__(
@@ -78,6 +83,8 @@ class RandomDataset(Dataset):
         augmentation: Callable[[np.ndarray], np.ndarray] | None = None,
         lmbd: float = 10,
         sigma: float = 3,
+        outside_density: float = 0.0,
+        outside_z_extent: tuple[float, float] = (400.0, 400.0),
     ) -> None:
         super().__init__()
         self.low_patchsize = low_patchsize
@@ -118,6 +125,29 @@ class RandomDataset(Dataset):
         self.weight = np.random.uniform(min_weight, max_weight, size=total)
         self._lo, self._extent = lo, hi - lo
 
+        # unlabeled out-of-focus molecules outside the target z range
+        below, above = (float(v) for v in outside_z_extent)
+        n_out = np.round(
+            self.num_particles * outside_density * (below + above) / self._extent[2]
+        ).astype(int)
+        self._out_offsets = np.concatenate([[0], np.cumsum(n_out)])
+        total_out = int(self._out_offsets[-1])
+        self.outside_coordinates = np.zeros((total_out, 3))
+        self.outside_weight = np.zeros(total_out)
+        if total_out > 0:
+            # uniform over the union of [lo - below, lo) and [hi, hi + above)
+            t = np.random.uniform(0, below + above, size=total_out)
+            z = np.where(t < below, lo[2] - below + t, hi[2] + (t - below))
+            self.outside_coordinates = np.stack(
+                [
+                    np.random.uniform(lo[0], hi[0], size=total_out),
+                    np.random.uniform(lo[1], hi[1], size=total_out),
+                    z,
+                ],
+                axis=1,
+            )
+            self.outside_weight = np.random.uniform(min_weight, max_weight, size=total_out)
+
     def __len__(self) -> int:
         return self.data_size
 
@@ -129,8 +159,12 @@ class RandomDataset(Dataset):
         if self.augmentation is not None:
             observe = self.augmentation(observe)
 
+        out = slice(self._out_offsets[index], self._out_offsets[index + 1])
+        emitters = np.concatenate([molecules, self.outside_coordinates[out]])
+        weights = np.concatenate([self.weight[sl], self.outside_weight[out]])
+
         shape = (self.low_patchsize, self.low_patchsize, self.low_depth)
-        x = (psf(observe, molecules) * self.weight[sl, None]).sum(0).reshape(shape, order="F")
+        x = (psf(observe, emitters) * weights[:, None]).sum(0).reshape(shape, order="F")
         # shot noise + read noise
         x += np.random.poisson(lam=self.lmbd, size=x.shape)
         x += np.random.normal(size=x.shape) * self.sigma

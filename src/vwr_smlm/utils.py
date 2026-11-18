@@ -107,6 +107,13 @@ def nms(
     return ~(close & higher).any(0)
 
 
+def inside_space(coords: torch.Tensor, space: TargetSpace) -> torch.Tensor:
+    """Boolean mask of coordinates [nm] inside the target space (half-open box)."""
+    lo = space.minimum.to(coords)
+    hi = lo + space.size.to(coords)
+    return ((coords >= lo) & (coords < hi)).all(-1)
+
+
 # ---------------------------------------------------------------------------
 # Target space (physical extent covered by the normalized [0, 1)^3 cube)
 # ---------------------------------------------------------------------------

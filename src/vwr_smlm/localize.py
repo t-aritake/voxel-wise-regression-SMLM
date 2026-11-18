@@ -23,6 +23,7 @@ from .utils import (
     gen_defaults,
     get_device,
     grid_size,
+    inside_space,
     load_model,
     nms,
     nms_radius,
@@ -63,6 +64,7 @@ def main(cfg: DictConfig) -> None:
     )
 
     radius = nms_radius(cfg, device)
+    drop_outside = OmegaConf.select(cfg, "inference.drop_outside", default=False)
     out_path = run_dir() / f"coord_{lcfg.threshold:.2f}.txt"
     start = time.perf_counter()
     with open(out_path, "w") as f:
@@ -74,6 +76,8 @@ def main(cfg: DictConfig) -> None:
             for pred in predictions:
                 det = pred[pred[:, 3] > lcfg.threshold]
                 det = det[nms(det[:, :3], det[:, 3], radius)]
+                if drop_outside:
+                    det = det[inside_space(det[:, :3], space)]
                 np.savetxt(f, det.cpu().numpy(), delimiter=",")
             if i % 10 == 0:
                 elapsed = time.perf_counter() - start

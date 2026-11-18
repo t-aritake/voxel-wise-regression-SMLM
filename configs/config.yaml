@@ -20,6 +20,10 @@ simulation:
   max_weight: 1.0
   lmbd: 10                  # mean of Poisson shot noise
   sigma: 3                  # std of Gaussian read noise
+  # Unlabeled out-of-focus molecules above/below the target z range, so that the model learns
+  # not to report them (density relative to labeled molecules per unit z; 0 = off).
+  outside_density: 1.0
+  outside_z_extent: [400.0, 400.0]  # [below, above] nm
 
 # Random lateral drift between focal planes
 augmentation:
@@ -55,6 +59,8 @@ inference:
   # Merge detections closer than this ellipsoid [x, y, z] nm, keeping the most confident.
   # null = off. Use together with train.neighbor_margin.
   nms_radius: [50.0, 50.0, 100.0]
+  # Drop detections outside the target space (e.g. z above the top focal plane range)
+  drop_outside: true
 
 validate:
   model_dir: ???            # required: directory of a trained model
