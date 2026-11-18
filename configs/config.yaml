@@ -1,0 +1,81 @@
+# Configuration for all vwr-* commands (Hydra).
+# Override any value from the command line, e.g.
+#   uv run vwr-train train.epochs=5 simulation.low_patchsize=32
+#   uv run vwr-validate validate.model_dir=data/learned_models/220308_1357
+
+seed: 1
+device: auto        # auto | cuda | cpu
+num_workers: 4      # DataLoader workers
+
+# Physical / simulation parameters (training data).
+# validate re-uses the values stored with the trained model instead.
+simulation:
+  low_patchsize: 64         # image size of each focal plane [px]
+  low_depth: 4              # number of focal planes
+  resolution_xy_low: 192    # nm / px
+  resolution_depth_low: 400 # nm between focal planes
+  scale_xy: 8               # lateral super-resolution factor
+  scale_depth: 8            # axial super-resolution factor
+  min_weight: 0.3           # range of molecule peak intensity
+  max_weight: 1.0
+  lmbd: 10                  # mean of Poisson shot noise
+  sigma: 3                  # std of Gaussian read noise
+
+# Random lateral drift between focal planes
+augmentation:
+  enabled: true
+  max_translation: 2        # in high-resolution pixels (resolution_xy_low / scale_xy)
+  base_plane: 2             # plane that is never shifted
+
+train:
+  epochs: 20
+  batch_size: 50
+  test_batch_size: 50
+  lr: 1.0e-3
+  log_interval: 100
+  num_particle_train: 50
+  num_particle_test: 50
+  num_data_train: 100000
+  num_data_test: 10000
+  negapos_ratio: 3
+  save_model: true          # saved into the Hydra run directory (see output_dirs)
+
+validate:
+  model_dir: ???            # required: directory of a trained model
+  seed: 0
+  threshold: 0.9
+  num_data: 1000
+  num_particles: 8
+  patchsize: null           # image size [px]; null = same as training (original code used 64)
+  batch_size: 50
+  mmd_sigma: 12.0           # [nm]
+  eval_voxel: [24.0, 24.0, 50.0]  # voxel size [nm] for the Jaccard index
+  augmentation: true
+
+localize:
+  model_dir: ???            # required: directory of a trained model
+  data_dir: data/datasets/191216
+  cameras: [cam2, cam1, cam3, cam4]  # camera directories in focal-plane (z) order
+  masked: false             # use masked_cam* directories
+  threshold: 0.5
+  batch_size: 50
+
+visualize:
+  coord_file: ???           # required: coord_*.txt written by vwr-localize
+  voxel_size: [24.0, 24.0, 50.0]  # [nm]
+  xy_extent: 49152.0        # field of view [nm] (256 px * 192 nm)
+  zmin: -200.0
+  zmax: 1400.0
+
+# Where each command writes its outputs (one timestamped directory per run)
+output_dirs:
+  train: data/learned_models
+  validate: data/results/validate
+  localize: data/results/localize
+  visualize: data/results/visualize
+
+hydra:
+  run:
+    dir: ${output_dirs.${hydra:job.name}}/${now:%y%m%d_%H%M%S}
+  job:
+    chdir: false
