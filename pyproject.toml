@@ -1,0 +1,39 @@
+[project]
+name = "vwr-smlm"
+version = "0.2.0"
+description = "Single-Molecule Localization by Voxel-Wise Regression Using Convolutional Neural Network"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Toshimitsu Aritake" }]
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.4",
+    "numpy>=1.26",
+    "pillow>=10.0",
+    "matplotlib>=3.8",
+    "hydra-core>=1.3.2",
+]
+
+[project.scripts]
+vwr-train = "vwr_smlm.train:main"
+vwr-validate = "vwr_smlm.validate:main"
+vwr-localize = "vwr_smlm.localize:main"
+vwr-visualize = "vwr_smlm.visualize:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/vwr_smlm"]
+
+[dependency-groups]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501"]  # handled by ruff format
