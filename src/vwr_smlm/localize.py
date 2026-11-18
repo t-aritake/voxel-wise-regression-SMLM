@@ -24,6 +24,9 @@ from .utils import (
     get_device,
     grid_size,
     load_model,
+    nms,
+    nms_radius,
+    offset_margin,
     run_dir,
     to_absolute,
     voxel_interval,
@@ -59,14 +62,19 @@ def main(cfg: DictConfig) -> None:
         height, width, depth, sim.resolution_xy_low, sim.resolution_depth_low, sim.scale_depth
     )
 
+    radius = nms_radius(cfg, device)
     out_path = run_dir() / f"coord_{lcfg.threshold:.2f}.txt"
     start = time.perf_counter()
     with open(out_path, "w") as f:
         for i, data in enumerate(loader, start=1):
             predictions = model(data.to(device, non_blocking=True)).double()
-            predictions[..., :3] = to_absolute(predictions, defaults, interval, space)
+            predictions[..., :3] = to_absolute(
+                predictions, defaults, interval, space, offset_margin(model_cfg)
+            )
             for pred in predictions:
-                np.savetxt(f, pred[pred[:, 3] > lcfg.threshold].cpu().numpy(), delimiter=",")
+                det = pred[pred[:, 3] > lcfg.threshold]
+                det = det[nms(det[:, :3], det[:, 3], radius)]
+                np.savetxt(f, det.cpu().numpy(), delimiter=",")
             if i % 10 == 0:
                 elapsed = time.perf_counter() - start
                 fps = i * lcfg.batch_size / elapsed

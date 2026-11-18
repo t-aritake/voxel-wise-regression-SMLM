@@ -23,6 +23,7 @@ from .utils import (
     build_augmentation,
     get_device,
     grid_size,
+    offset_margin,
     run_dir,
     save_run,
 )
@@ -88,7 +89,11 @@ def evaluate(
 @hydra.main(config_path=CONFIG_DIR, config_name="config", version_base="1.3")
 def main(cfg: DictConfig) -> None:
     sim, tcfg = cfg.simulation, cfg.train
-    print(OmegaConf.to_yaml(OmegaConf.masked_copy(cfg, ["simulation", "augmentation", "train"])))
+    print(
+        OmegaConf.to_yaml(
+            OmegaConf.masked_copy(cfg, ["simulation", "augmentation", "model", "train"])
+        )
+    )
     device = get_device(cfg.device)
     torch.manual_seed(cfg.seed)
     np.random.seed(cfg.seed)
@@ -117,7 +122,12 @@ def main(cfg: DictConfig) -> None:
 
     model = Network(input_depth=sim.low_depth).to(device)
     grid = grid_size(sim.low_depth, sim.low_patchsize, sim.low_patchsize)
-    loss_fn = LocationAndConfidenceLoss(grid, negapos_ratio=tcfg.negapos_ratio).to(device)
+    loss_fn = LocationAndConfidenceLoss(
+        grid,
+        offset_margin=offset_margin(cfg),
+        negapos_ratio=tcfg.negapos_ratio,
+        neighbor_margin=tcfg.neighbor_margin,
+    ).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=tcfg.lr)
 
     train_history: list[float] = []

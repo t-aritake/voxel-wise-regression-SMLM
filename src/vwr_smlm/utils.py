@@ -54,15 +54,57 @@ def voxel_interval(
     return 1.0 / torch.tensor(grid, device=device, dtype=torch.float32)
 
 
+def decode_offset(raw: torch.Tensor, margin: float | None = None) -> torch.Tensor:
+    """Map the network output (sigmoid, in [0, 1]) to an offset from the voxel's minimum corner,
+    in voxel units.
+
+    ``margin=None`` (legacy): offset = raw, i.e. the voxel is exactly [0, 1].  A molecule near a
+    voxel boundary then needs a saturated sigmoid.
+
+    ``margin=m``: the output is centered on the voxel center and its range is extended by ``m``
+    voxels on each side, offset = 0.5 + (1 + 2m)(raw - 0.5) in [-m, 1 + m].  Boundaries (0, 1)
+    then correspond to raw = 0.5 -/+ 0.5 / (1 + 2m), away from saturation.  Each molecule is still
+    assigned to the voxel that contains it (= the voxel with the nearest center).
+    """
+    if margin is None:
+        return raw
+    return 0.5 + (1.0 + 2.0 * margin) * (raw - 0.5)
+
+
 def to_absolute(
     predictions: torch.Tensor,
     defaults: torch.Tensor,
     interval: torch.Tensor,
     space: TargetSpace,
+    margin: float | None = None,
 ) -> torch.Tensor:
-    """Convert per-voxel offsets ``predictions[..., :3]`` to coordinates in nm."""
-    normalized = predictions[..., :3] * interval + defaults
+    """Convert per-voxel predictions ``predictions[..., :3]`` to coordinates in nm.
+
+    ``defaults`` are the minimum corners of the voxels (``gen_defaults(..., centering=False)``).
+    """
+    normalized = decode_offset(predictions[..., :3], margin) * interval + defaults
     return normalized * space.size.to(predictions) + space.minimum.to(predictions)
+
+
+def nms(
+    coords: torch.Tensor, confidence: torch.Tensor, radius: torch.Tensor | None
+) -> torch.Tensor:
+    """Merge duplicate detections of one molecule (e.g. from neighboring voxels).
+
+    A detection is dropped if a detection with higher confidence lies within the ellipsoid
+    ``sum(((a - b) / radius) ** 2) < 1`` (``radius`` per axis, in the units of ``coords``).
+    Single-pass ("fast") NMS: suppression is not transitive.  Returns a boolean keep mask.
+    """
+    n = len(coords)
+    if radius is None or n < 2:
+        return torch.ones(n, dtype=torch.bool, device=coords.device)
+    d = ((coords[:, None, :] - coords[None, :, :]) / radius.to(coords)).pow(2).sum(-1)
+    close = d < 1
+    order = confidence.argsort(descending=True)
+    rank = torch.empty_like(order)
+    rank[order] = torch.arange(n, device=coords.device)
+    higher = rank[:, None] < rank[None, :]  # [i, j]: i ranks above j
+    return ~(close & higher).any(0)
 
 
 # ---------------------------------------------------------------------------
@@ -116,7 +158,7 @@ def run_dir() -> Path:
 def save_run(dirpath: str | Path, cfg: DictConfig, **history: Any) -> None:
     """Save the resolved config (``config.yaml``) and loss history next to the weights."""
     dirpath = Path(dirpath)
-    to_save = OmegaConf.masked_copy(cfg, ["seed", "simulation", "augmentation", "train"])
+    to_save = OmegaConf.masked_copy(cfg, ["seed", "simulation", "augmentation", "model", "train"])
     OmegaConf.save(to_save, dirpath / CONFIG_NAME, resolve=True)
     with open(dirpath / HISTORY_NAME, "w") as f:
         json.dump(history, f, indent=2)
@@ -168,6 +210,7 @@ def load_config(dirpath: str | Path) -> DictConfig:
                 "seed": args.seed,
                 "simulation": simulation,
                 "augmentation": {"enabled": True, "max_translation": 2, "base_plane": 2},
+                "model": {"offset_margin": None},
                 "train": {k: v for k, v in vars(args).items() if k not in _SIMULATION_KEYS},
             }
         )
@@ -185,6 +228,17 @@ def load_model(
     state = torch.load(Path(dirpath) / WEIGHTS_NAME, map_location=device, weights_only=True)
     model.load_state_dict(state)
     return model.to(device).eval(), cfg
+
+
+def nms_radius(cfg: DictConfig, device: torch.device | str | None = None) -> torch.Tensor | None:
+    """``inference.nms_radius`` as a tensor (``None`` = no NMS)."""
+    r = OmegaConf.select(cfg, "inference.nms_radius", default=None)
+    return None if r is None else torch.tensor(list(r), dtype=torch.float64, device=device)
+
+
+def offset_margin(cfg: DictConfig) -> float | None:
+    """``model.offset_margin`` of a config (``None`` for models without the setting)."""
+    return OmegaConf.select(cfg, "model.offset_margin", default=None)
 
 
 def get_device(name: str = "auto") -> torch.device:

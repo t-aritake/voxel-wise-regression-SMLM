@@ -27,6 +27,12 @@ augmentation:
   max_translation: 2        # in high-resolution pixels (resolution_xy_low / scale_xy)
   base_plane: 2             # plane that is never shifted
 
+model:
+  # Range of the per-voxel offset output (see vwr_smlm.utils.decode_offset).
+  # null: legacy, offset from the voxel corner in [0, 1] (boundaries need a saturated sigmoid)
+  # m:    centered on the voxel center, extended by m voxels on each side ([-m, 1 + m])
+  offset_margin: 0.25
+
 train:
   epochs: 20
   batch_size: 50
@@ -38,7 +44,17 @@ train:
   num_data_train: 100000
   num_data_test: 10000
   negapos_ratio: 3
+  # Neighbors of boundary molecules (within this margin, in voxels) get no confidence target
+  # and regress the molecule's location instead. Requires model.offset_margin >= this.
+  # null = off (every non-positive voxel can be a hard negative).
+  neighbor_margin: 0.25
   save_model: true          # saved into the Hydra run directory (see output_dirs)
+
+# Post-processing shared by validate and localize
+inference:
+  # Merge detections closer than this ellipsoid [x, y, z] nm, keeping the most confident.
+  # null = off. Use together with train.neighbor_margin.
+  nms_radius: [50.0, 50.0, 100.0]
 
 validate:
   model_dir: ???            # required: directory of a trained model

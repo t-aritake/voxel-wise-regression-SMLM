@@ -28,6 +28,9 @@ from .utils import (
     get_device,
     grid_size,
     load_model,
+    nms,
+    nms_radius,
+    offset_margin,
     run_dir,
     to_absolute,
     voxel_interval,
@@ -86,6 +89,7 @@ def main(cfg: DictConfig) -> None:
     interval = voxel_interval(grid, device)
     space_min = dataset.space.minimum.to(device)
     space_size = dataset.space.size.to(device)
+    radius = nms_radius(cfg, device)
     eval_voxel = torch.tensor(list(vcfg.eval_voxel), dtype=torch.float64, device=device)
     eval_grid = torch.ceil(space_size / eval_voxel)
 
@@ -99,7 +103,9 @@ def main(cfg: DictConfig) -> None:
     for data, targets in loader:
         data = data.to(device)
         predictions = model(data).double()
-        coords = to_absolute(predictions, defaults, interval, dataset.space)
+        coords = to_absolute(
+            predictions, defaults, interval, dataset.space, offset_margin(model_cfg)
+        )
 
         for pred, coord, target in zip(predictions, coords, targets, strict=True):
             true_coord = target[:, :3].to(device).double() * space_size + space_min
@@ -110,6 +116,7 @@ def main(cfg: DictConfig) -> None:
                 union += len(np.unique(true_voxels))
                 continue
             est_coord = coord[detected]
+            est_coord = est_coord[nms(est_coord, pred[detected, 3], radius)]
 
             # offset to the closest true molecule from each estimate
             diff = (true_coord[None, :, :] - est_coord[:, None, :]).cpu().numpy()
