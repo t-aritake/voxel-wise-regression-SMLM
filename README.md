@@ -7,27 +7,55 @@ For real dataset, please contact the author.
 ## Directories
 
 ```
-.                       main codes
+.
+|-configs/config.yaml   all options (Hydra)
+|-src/vwr_smlm/         package (models, datasets, loss, train, validate, localize, visualize)
+|-tests/
 |-data
 | |-datasets            directory to put data for datasets
-| |-learned_models      directory to save parameters of a learned model
+| |-learned_models      trained models (one timestamped directory per run)
+| |-results             outputs of validate / localize / visualize
 ```
 
 ## Prerequisites
 
-* PyTorch 1.3.1+
-* Python 3.7.x
+* [uv](https://docs.astral.sh/uv/)
+* Python 3.10+ / PyTorch 2.4+ (installed automatically by `uv sync`)
 
+```
+uv sync
+```
 
 ## Usage
 
-**Training**
+All options live in `configs/config.yaml` and can be overridden on the command line
+with Hydra syntax (`section.key=value`). Each run writes into its own timestamped
+directory under `output_dirs.*` (the resolved config is saved alongside it in `.hydra/`).
 
-``CUDA_VISIBLE_DEVICES=0 python run.py --low-patchsize=64 --num-particle-train=50 --num-particle-test=50 --low-depth=4 --epochs=20 --num-data-train=100000 --num-data-test=10000 --batch-size=50 --log-interval=100 --lr=1e-3 --min-weight=0.3 --save-model``
+**Training** (the model is saved to `data/learned_models/<timestamp>/`)
 
-**Validate**
+``CUDA_VISIBLE_DEVICES=0 uv run vwr-train``
 
-``CUDA_VISIBLE_DEVICES=0 python validate.py directory_of_learned_model``
+``uv run vwr-train train.epochs=5 train.num_data_train=10000 simulation.low_patchsize=32``
+
+**Validate** on simulated data
+
+``uv run vwr-validate validate.model_dir=data/learned_models/<run>``
+
+**Localize** molecules in real data (`data/datasets/191216/cam*/%05d.tiff`)
+
+``uv run vwr-localize localize.model_dir=data/learned_models/<run> localize.threshold=0.9``
+
+**Visualize** localization results
+
+``uv run vwr-visualize visualize.coord_file=data/results/localize/<run>/coord_0.90.txt``
+
+Models trained with the original (2020) code, which stored `args.pkl`, can still be
+loaded by `vwr-validate` / `vwr-localize`.
+
+**Tests**
+
+``uv run pytest``
 
 ## Citation
 If you find our research useful, please cite the paper:
